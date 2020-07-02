@@ -1,0 +1,44 @@
+service: step1
+provider:
+  name: aws
+  stage: dev
+  region: ap-northeast-1
+
+functions:
+  hello:
+    handler: handler.hello
+
+stepFunctions:
+  stateMachines:
+    hellostepfunc1:
+      events:
+        - http:
+            path: gofunction
+            method: GET
+        - schedule:
+            rate: rate(10 minutes)
+            enabled: true
+            input:
+              key1: value1
+              key2: value2
+              stageParams:
+                stage: dev
+      name: myStateMachine
+      definition:
+        Comment: "A Hello World example of the Amazon States Language using an AWS Lambda Function"
+        StartAt: HelloWorld1
+        States:
+          HelloWorld1:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [hello, Arn]
+            End: true
+      tags:
+        Team: Atlantis
+
+  validate: true # enable pre-deployment definition validation (disabled by default)
+
+plugins:
+  - serverless-step-functions
+  - serverless-pseudo-parameters
+
