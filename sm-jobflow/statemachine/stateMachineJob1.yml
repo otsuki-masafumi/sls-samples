@@ -1,0 +1,7 @@
+name: SlsStateMachineJob1
+definition:
+  Comment: Always cussess
+  StartAt: Finished
+  States:
+    Finished:
+      Type: Succeed

@@ -1,0 +1,50 @@
+name: SlsExecutor
+definition:
+  Comment: Example of state machine execution function
+  StartAt: CheckExecStatus
+  States:
+    CheckExecStatus:
+      Type: Task
+      Resource: 
+        Fn::GetAtt: [LambdaCheckStatus, Arn]
+      InputPath: $.lambda
+      ResultPath: $.CheckResult
+      Next: EvalStatus
+    EvalStatus:
+      Type: Choice
+      InputPath: $
+      Choices:
+      - Variable: "$.CheckResult.check_result"
+        NumericEquals: 0
+        Next: Execute
+      - Variable: "$.CheckResult.check_result"
+        NumericEquals: 1
+        Next: AlreadyCompleted
+      - Variable: "$.CheckResult.check_result"
+        NumericEquals: 2
+        Next: ExecutionFailed
+    Execute:
+      Type: Task
+      Resource: arn:aws:states:::states:startExecution.sync
+      InputPath: $.lambda
+      Parameters:
+        StateMachineArn.$: $.sm_arn
+        Name.$: $.execution_name
+      Catch:
+        - ErrorEquals: ["States.TaskFailed"]
+          Next: ExecutionFailed
+          ResultPath: $.cause
+      Next: Finished
+    AlreadyCompleted:
+      Type: Pass
+      Next: Finished
+    ExecutionFailed:
+      Type: Fail
+      Cause: Job Flow failed
+    Finished:
+      Type: Succeed
+
+
+
+
+

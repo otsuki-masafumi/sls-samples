@@ -1,0 +1,72 @@
+name: SlsJobFlow
+definition:
+  Comment: Example to execute job flow by Step Functions
+  StartAt: Prep
+  States:
+    Prep:
+      Type: Pass
+      Next: Job1
+    Job1:
+      Type: Task
+      InputPath: "$"
+      ResultPath: "$.result1"
+      Resource: arn:aws:states:::states:startExecution.sync
+      Parameters:
+        StateMachineArn: 
+          "Fn::Sub": arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:SlsExecutor
+        Input:
+          lambda:
+            sm_arn: 
+              "Fn::Sub": arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:SlsStateMachineJob1
+            execution_name.$: $.JobDate
+      Next: Job2
+      Catch:
+        - ErrorEquals: ["States.TaskFailed"]
+          Next: NotifyFailure
+          ResultPath: "$.cause"
+    Job2:
+      Type: Task
+      InputPath: "$"
+      ResultPath: "$.result2"
+      Resource: arn:aws:states:::states:startExecution.sync
+      Parameters:
+        StateMachineArn: 
+          "Fn::Sub": arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:SlsExecutor
+        Input:
+          lambda:
+            sm_arn: 
+              "Fn::Sub": arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:SlsStateMachineJob2
+            execution_name.$: $.JobDate
+      Next: Job3
+      Catch:
+        - ErrorEquals: ["States.TaskFailed"]
+          Next: NotifyFailure
+          ResultPath: "$.cause"
+    Job3:
+      Type: Task
+      InputPath: "$"
+      ResultPath: "$.result3"
+      Resource: arn:aws:states:::states:startExecution.sync
+      Parameters:
+        StateMachineArn: 
+          "Fn::Sub": arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:SlsExecutor
+        Input:
+          lambda:
+            sm_arn: 
+              "Fn::Sub": arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:SlsStateMachineJob3
+            execution_name.$: $.JobDate
+      Next: Finished
+      Catch:
+        - ErrorEquals: ["States.TaskFailed"]
+          Next: NotifyFailure
+          ResultPath: "$.cause"
+    Finished:
+      Type: Succeed
+    NotifyFailure:
+      Comment: "Write here failure notification"
+      Type: Pass
+      Next: ExecutionFailed
+    ExecutionFailed:
+      Type: Fail
+      Cause: "Glue job failed"
+

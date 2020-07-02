@@ -1,0 +1,50 @@
+service: sls-sm-jobflow
+provider:
+  name: aws
+  stage: dev
+  region: ap-northeast-1
+  runtime: python3.8
+  role: lambdaExecutionCheckerRole
+
+plugins:
+  - serverless-step-functions
+  - serverless-pseudo-parameters
+
+functions:
+  LambdaCheckStatus:
+    handler: lambda/check_execution_status.handler
+
+stepFunctions:
+  stateMachines:
+    JobFlow: ${file(statemachine/stateMachineJobFlow.yml)}
+    Job1: ${file(statemachine/stateMachineJob1.yml)}
+    Job2: ${file(statemachine/stateMachineJob2.yml)}
+    Job3: ${file(statemachine/stateMachineJob3.yml)}
+    ExecIfNotCompleted: ${file(statemachine/execIfNotCompleted.yml)}
+  validate: true # enable pre-deployment definition validation (disabled by default)
+
+resources:
+  Resources:
+    lambdaExecutionCheckerRole:
+      Type: "AWS::IAM::Role"
+      Properties:
+        RoleName: lambdaExecutionCheckerRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: "sts:AssumeRole"
+        Path: "/"
+        Policies:
+          - PolicyName: LambdaExecutionPolicy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - "states:ListExecutions"
+                    - "lambda:InvokeFunction"
+                  Resource: "*"
