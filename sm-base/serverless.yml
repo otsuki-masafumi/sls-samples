@@ -1,0 +1,183 @@
+service: sls-sm-base
+provider:
+  name: aws
+  stage: dev
+  region: ap-northeast-1
+
+plugins:
+  - serverless-step-functions
+  - serverless-pseudo-parameters
+
+custom:
+  GlueS3Bucket: aws-glue-scripts-m3d1pb
+  GlueJobName1: sls-sm-base-gluejob1
+  GlueJobName2: sls-sm-base-gluejob2
+
+stepFunctions:
+  stateMachines:
+    ParentStateMachine:
+      events:
+        - schedule:
+            rate: rate(1 hour)
+            enabled: false
+            input:
+              key1: value1
+              key2: value2
+              stageParams:
+                stage: dev
+      name: ParentStateMachine
+      definition:
+        Comment: "Example to execute child state machine"
+        StartAt: Preprocessing
+        States:
+          Preprocessing:
+            Comment: "Write prep if you need"
+            Type: Pass
+            Next: ExecuteGlueJobs
+          ExecuteGlueJobs:
+            Type: Task
+            Resource: "arn:aws:states:::states:startExecution.sync"
+            Parameters:
+              StateMachineArn:
+                "Fn::Sub": arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:ChildStateMachine
+              Input:
+                GlueJobName1: ${self:custom.GlueJobName1}
+                GlueJobName2: ${self:custom.GlueJobName2}
+            Catch:
+              - ErrorEquals: ["States.TaskFailed"]
+                Next: NotifyFailure
+                ResultPath: "$.cause"
+            Next: Finished
+          Finished:
+            Type: Succeed
+          NotifyFailure:
+            Comment: "Write here failure notification"
+            Type: Pass
+            Next: ExecutionFailed
+          ExecutionFailed:
+            Type: Fail
+            Cause: "Glue job failed"
+
+    ChildStateMachine:
+      ${file(statemachine/childStateMachine.yml)}
+
+  validate: true # enable pre-deployment definition validation (disabled by default)
+
+resources:
+  Resources:
+    GlueJob1:
+      Type: AWS::Glue::Job
+      Properties:
+        Command:
+          Name: pythonshell
+          PythonVersion: 3
+          ScriptLocation: 
+            "Fn::Sub": s3://${self:custom.GlueS3Bucket}/scripts/glue_job1.py
+        DefaultArguments:
+          "--job-bookmark-option": "job-bookmark-disable"
+        ExecutionProperty:
+          MaxConcurrentRuns: 2
+        GlueVersion: "1.0"
+        MaxRetries: 0
+        MaxCapacity: 0.0625
+        Name: ${self:custom.GlueJobName1}
+        Role: !Ref GlueJobRole
+    GlueJob2:
+      Type: AWS::Glue::Job
+      Properties:
+        Command:
+          Name: pythonshell
+          PythonVersion: 3
+          ScriptLocation: 
+            "Fn::Sub": s3://${self:custom.GlueS3Bucket}/scripts/glue_job2.py
+        DefaultArguments:
+          "--job-bookmark-option": "job-bookmark-disable"
+        ExecutionProperty:
+          MaxConcurrentRuns: 2
+        GlueVersion: "1.0"
+        MaxRetries: 0
+        MaxCapacity: 0.0625
+        Name: ${self:custom.GlueJobName2}
+        Role: !Ref GlueJobRole
+    GlueJobRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            -
+              Effect: "Allow"
+              Principal:
+                Service:
+                  - "glue.amazonaws.com"
+              Action:
+                - "sts:AssumeRole"
+        Path: "/"
+        Policies:
+          -
+            PolicyName: "GlueJobExecutionPolicy"
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: "Allow"
+                  Action:
+                    - "glue:*"
+                    - "s3:GetBucketLocation"
+                    - "s3:ListBucket"
+                    - "s3:ListAllMyBuckets"
+                    - "s3:GetBucketAcl"
+                    - "ec2:DescribeVpcEndpoints"
+                    - "ec2:DescribeRouteTables"
+                    - "ec2:CreateNetworkInterface"
+                    - "ec2:DeleteNetworkInterface"
+                    - "ec2:DescribeNetworkInterfaces"
+                    - "ec2:DescribeSecurityGroups"
+                    - "ec2:DescribeSubnets"
+                    - "ec2:DescribeVpcAttribute"
+                    - "iam:ListRolePolicies"
+                    - "iam:GetRole"
+                    - "iam:GetRolePolicy"
+                    - "cloudwatch:PutMetricData"                
+                  Resource: "*"
+                - Effect: "Allow"
+                  Action:
+                    - "s3:CreateBucket"
+                  Resource: "arn:aws:s3:::aws-glue-*"
+                - Effect: "Allow"
+                  Action:
+                    - "s3:CreateBucket"
+                  Resource: "arn:aws:s3:::aws-glue-*"
+                - Effect: "Allow"
+                  Action:
+                    - "s3:GetObject"
+                    - "s3:PutObject"
+                    - "s3:DeleteObject"
+                  Resource: 
+                    - "arn:aws:s3:::aws-glue-*/*"
+                    - "arn:aws:s3:::*/*aws-glue-*/*"
+                - Effect: "Allow"
+                  Action:
+                    - "s3:GetObject"
+                  Resource: 
+                    - "arn:aws:s3:::crawler-public*"
+                    - "arn:aws:s3:::aws-glue-*"
+                - Effect: "Allow"
+                  Action:
+                    - "logs:CreateLogGroup"
+                    - "logs:CreateLogStream"
+                    - "logs:PutLogEvents"
+                    - "logs:AssociateKmsKey"                
+                  Resource: 
+                    - "arn:aws:logs:*:*:/aws-glue/*"
+                - Effect: "Allow"
+                  Action:
+                    - "ec2:CreateTags"
+                    - "ec2:DeleteTags"
+                  Condition:
+                    ForAllValues:StringEquals:
+                      aws:TagKeys:
+                        - "aws-glue-service-resource"
+                  Resource: 
+                    - "arn:aws:ec2:*:*:network-interface/*"
+                    - "arn:aws:ec2:*:*:security-group/*"
+                    - "arn:aws:ec2:*:*:instance/*"
