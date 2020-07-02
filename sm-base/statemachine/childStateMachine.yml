@@ -1,0 +1,42 @@
+name: ChildStateMachine
+definition:
+  Comment: Example to execute AWS Glue Job
+  StartAt: Prep
+  States:
+    Prep:
+      Type: Pass
+      Next: execGlueJob1
+    execGlueJob1:
+      Type: Task
+      InputPath: "$"
+      ResultPath: "$.result1"
+      Resource: arn:aws:states:::glue:startJobRun.sync
+      Parameters:
+        JobName.$: "$.GlueJobName1"
+      Next: execGlueJob2
+      Catch:
+        - ErrorEquals: ["States.TaskFailed"]
+          Next: NotifyFailure
+          ResultPath: "$.cause"
+    execGlueJob2:
+      Type: Task
+      InputPath: "$"
+      ResultPath: "$.result2"
+      Resource: arn:aws:states:::glue:startJobRun.sync
+      Parameters:
+        JobName.$: "$.GlueJobName2"
+      Next: Finished
+      Catch:
+        - ErrorEquals: ["States.TaskFailed"]
+          Next: NotifyFailure
+          ResultPath: "$.cause"
+    Finished:
+      Type: Succeed
+    NotifyFailure:
+      Comment: "Write here failure notification"
+      Type: Pass
+      Next: ExecutionFailed
+    ExecutionFailed:
+      Type: Fail
+      Cause: "Glue job failed"
+
